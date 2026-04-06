@@ -1,18 +1,86 @@
 import os, re, pandas as pd
-os.system("cls" if os.name == 'nt' else "clear")
+os.system("cls" if os.name == "nt" else "clear")
 
-df = pd.read_excel('tareas.xlsx', sheet_name='Sheet1')
-df["Categoria"] = df["Etapa"].where(df["Etapa"].str.contains(r"\(", na=False))
-df["Categoria"] = df["Categoria"].ffill()
-
-is_nan = df['Personas asignadas'].isna() & df['Etiquetas'].notna()
-df['Etiquetas'] = df['Etiquetas'].shift(-1).where(is_nan.shift(-1), df['Etiquetas'])
-
-df_limpio = df.dropna(subset=['Personas asignadas']).copy()
-df_final = df_limpio[df_limpio['Categoria'].str.contains('Asignado', na=False)].copy()
-reporte = df_final[['Personas asignadas', 'Etiquetas', 'Última actualización de la etapa']]
+df = pd.read_excel("tareas.xlsx", sheet_name="Sheet1")
 
 TEAM = {
+  "Kenny Marcial Rodríguez García": True,
+  "SMARTLIFE": True,
+  "Martin Bou Mansour Bakhos": True,
+  "Karlanis Tariffa del Chiaro": False,
+  "IVENETI": True,
+  "INVERSIONES PENALVA 2022": False,
+  "TELECOMUNICACIONES K. SUAREZ": False,
+  "Marcial Venancio Rodríguez González": False,
+  "LATIN TELECOM": False,
+  "CG SERVICIOS": False,
+  "Moisés Enmanuel Urbina Villarreal": False,
+  "Argenis José Acosta Veliz": False,
+  "Jonayker Daniel Mendoza Pérez": False,
+  "Jorge Luis Rodríguez Parra": True,
+  "Socrates Antonio Sequera Sanchez": True,
+  "Óscar Eduardo Henriquez Zambrano": False,
+  "Jeryco Salvador Ortega Palacios": False,
+  "SAT SERVICES": False,
+  "LFM Consultor": False,
+  "Ruben Dario Sanchez Avila": False,
+  "Dainee Yanibeth Zambrano Torres": False,
+  "GRUPO ARLO SYSTEM": False,
+  "TRS 2048": False
+}
+
+def find_header_value(header_name):
+  result = df[df["Etapa"].str.contains(f"{header_name} \(")]
+
+  if result.empty: return 0
+  return re.search(r"\d+", result["Etapa"].iloc[0]).group()
+
+header_index_list = df[df["Etapa"].str.contains("\(", na=False)].index.to_list()
+status = {
+  "asignadas": find_header_value("Asignado"),
+  "en_progreso": find_header_value("En Progreso"),
+  "por_facturar": find_header_value("Por facturar"),
+  "sections": {},
+  "asigned_persons": {}
+}
+
+for i in range(len(header_index_list) - 1):
+  start = header_index_list[i]
+  end = header_index_list[i+1]
+  
+  section_name = re.search(r"(.*)(?:\s*\(\d+\))", df.loc[start, "Etapa"]).groups()[0].strip()
+  content = df.iloc[start + 1:end].copy()  
+  
+  if section_name == "Asignado":
+    fila_vacia = content["Etapa"].isna() & content["Etiquetas"].notna()
+    etiqueta_a_subir = content["Etiquetas"].shift(-1)
+    content.loc[fila_vacia.shift(-1).fillna(False), "Etiquetas"] += f", {etiqueta_a_subir}"
+    content = content.dropna(subset=["Etapa"]).reset_index(drop=True)
+  
+  status["sections"][section_name] = content
+
+for index, row in status["sections"]["Asignado"].iterrows():
+  filter = re.search(r"s*\(User\)?", row["Personas asignadas"])
+  etiqueta = str(row["Etiquetas"]).upper()
+  type = "RF" if "RF" in etiqueta else "FTTH"
+
+  asigned_person = row["Personas asignadas"][0:filter.start()].strip() if filter else row["Personas asignadas"].strip()
+
+  if asigned_person not in status["asigned_persons"]:
+    if TEAM[asigned_person]: 
+      status["asigned_persons"][asigned_person] = {
+        "FTTH": 0,
+        "RF": 0
+      }
+    else: status["asigned_persons"][asigned_person] = 0
+
+  if TEAM[asigned_person]: status["asigned_persons"][asigned_person][type] += 1
+  else: status["asigned_persons"][asigned_person] += 1
+
+print(status["asigned_persons"].keys())
+
+def fetch_value(name, mix = False):
+  alias = {
     "KENNY": "Kenny Marcial Rodríguez García",
     "SMARTLIFE": "SMARTLIFE",
     "MARTIN": "Martin Bou Mansour Bakhos",
@@ -36,77 +104,42 @@ TEAM = {
     "DAINEE": "Dainee Yanibeth Zambrano Torres",
     "ARLO": "GRUPO ARLO SYSTEM",
     "TRS 2048": "TRS 2048"
-}
+  }
+  condition = status["asigned_persons"].get(alias[name])
 
-MIX_TEAM = [
-  TEAM["IVENETI"],
-  TEAM["KENNY"],
-  TEAM["MARTIN"],
-  TEAM["SMARTLIFE"],
-  TEAM["TERASERVICES VALENCIA"],
-  TEAM["TERASERVICES PUERTO"],
-  # TEAM["TERASERVICES ARAGUA"]
-]
-
-status = {
-  "Asignado": 0
-}
-
-for index, row in reporte.iterrows():
-  filter = re.search(r"s*\(User\)?", row['Personas asignadas'])
-  etiqueta = str(row['Etiquetas']).upper()
-  type = "RF" if "RF" == etiqueta else "FTTH"
-
-  person_name = row["Personas asignadas"][0:filter.start()].strip() if filter else row["Personas asignadas"].strip()
-
-  if person_name not in status:
-    if person_name in MIX_TEAM: 
-      status[person_name] = {
-        "FTTH": 0,
-        "RF": 0,
-        "Total": 0
-      }
-    else: status[person_name] = 0
-
-  if person_name in MIX_TEAM:
-    status[person_name][type] += 1
-    status[person_name]["Total"] += 1
-  else: status[person_name] += 1
-
-def exist_in_status(name, type = None):
-  if type: return status[TEAM[name]][type] if TEAM[name] in status else 0 
-  return status[TEAM[name]] if TEAM[name] in status else 0
+  if mix: return f"({status["asigned_persons"][alias[name]]["RF"]})RF / ({status["asigned_persons"][alias[name]]["FTTH"]})FTTH" if condition else "(0)RF / (0)FTTH"
+  return f"({status["asigned_persons"][alias[name]]})" if condition else "(0)"
 
 print(f"""
 STATUS DE LAS ASISTENCIAS
 
-▪️ N° de Asistencias Asignadas: {status["Asignado"]}
+▪️ N° de Asistencias Asignadas: {status["asignadas"]}
 ▪️ N° Tickets de Asistencias en espera: 0
 
-▪️ *ARGENIS ACOSTA:* ({exist_in_status("ARGENIS")})
-▪️ *CG SERVICIOS:* ({exist_in_status("CG")})
-▪️ *DAINEE ZAMBRANO: *({exist_in_status("DAINEE")})
-▪️ *GRUPO ARLO:* ({exist_in_status("ARLO")})
-▪️ *INVERSIONES PEÑALVA:* ({exist_in_status("PENALVA")})
-▪️ *IVENETI:* ({exist_in_status("IVENETI", "RF")})RF / ({exist_in_status("IVENETI", "FTTH")})FTTH
-▪️ *JERYCO ORTEGA:* ({exist_in_status("JERYCO")})
-▪️ *JONAYKER MENDOZA:* ({exist_in_status("JONAYKER")})
-▪️ *K. SUAREZ:* ({exist_in_status("KSUAREZ")})
-▪️ *KARLANIS TARIFFA:* ({exist_in_status("KARLANIS")})
-▪️ *KENNY RODRIGUEZ:* ({exist_in_status("KENNY", "RF")})RF / ({exist_in_status("KENNY", "FTTH")})FTTH
-▪️ *LATIN TELECOM:* ({exist_in_status("LATIN")})
-▪️ *LFM CONSULTOR:* ({exist_in_status("LFM")})
-▪️ *MARCIAL RODRIGUEZ:* ({exist_in_status("MARCIAL")})
-▪️ *MARTIN BOU:* ({exist_in_status("MARTIN", "RF")})RF / ({exist_in_status("MARTIN", "FTTH")})FTTH
-▪️ *MOISES URBINA:* ({exist_in_status("MOISES")})
-▪️ *OSCAR HENRIQUEZ:* ({exist_in_status("OSCAR")})
-▪️ *PE:* (0)AOC / ({exist_in_status("PE")})FTTH
-▪️ *SMARTLIFE:* ({exist_in_status("SMARTLIFE", "RF")})RF / ({exist_in_status("SMARTLIFE", "FTTH")})FTTH
-▪️ *TERASERVICES VALENCIA:* ({exist_in_status("TERASERVICES VALENCIA", "RF")})RF / ({exist_in_status("TERASERVICES VALENCIA", "FTTH")})FTTH
-▪️ *TERASERVICES PUERTO:* ({exist_in_status("TERASERVICES PUERTO", "RF")})RF / ({exist_in_status("TERASERVICES PUERTO", "FTTH")})FTTH
+▪️ *ARGENIS ACOSTA:* {fetch_value("ARGENIS")}
+▪️ *CG SERVICIOS:* {fetch_value("CG")}
+▪️ *DAINEE ZAMBRANO:* {fetch_value("DAINEE")}
+▪️ *GRUPO ARLO:* {fetch_value("ARLO")}
+▪️ *INVERSIONES PEÑALVA:* {fetch_value("PENALVA")}
+▪️ *IVENETI:* {fetch_value("IVENETI", True)}
+▪️ *JERYCO ORTEGA:* {fetch_value("JERYCO")}
+▪️ *JONAYKER MENDOZA:* {fetch_value("JONAYKER")}
+▪️ *K. SUAREZ:* {fetch_value("KSUAREZ")}
+▪️ *KARLANIS TARIFFA:* {fetch_value("KARLANIS")}
+▪️ *KENNY RODRIGUEZ:* {fetch_value("KENNY", True)}
+▪️ *LATIN TELECOM:* {fetch_value("LATIN")}
+▪️ *LFM CONSULTOR:* {fetch_value("LFM")}
+▪️ *MARCIAL RODRIGUEZ:* {fetch_value("MARCIAL")}
+▪️ *MARTIN BOU:* {fetch_value("MARTIN", True)}
+▪️ *MOISES URBINA:* {fetch_value("MOISES")}
+▪️ *OSCAR HENRIQUEZ:* {fetch_value("OSCAR")}
+▪️ *PE:* (0)AOC / {fetch_value("PE")}
+▪️ *SMARTLIFE:* {fetch_value("SMARTLIFE", True)}
+▪️ *TERASERVICES VALENCIA:* {fetch_value("TERASERVICES VALENCIA", True)}
+▪️ *TERASERVICES PUERTO:* {fetch_value("TERASERVICES PUERTO", True)}
 ▪️ *TERASERVICES ARAGUA:* (0)
 
-▪️ Asistencias en progreso: 0
-▪️ Asistencias por facturar: 0
+▪️ Asistencias en progreso: {status["en_progreso"]}
+▪️ Asistencias por facturar: {status["por_facturar"]}
 ▪️ Clientes atendidos por asistencia hoy: 0
 """)

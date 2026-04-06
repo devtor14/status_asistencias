@@ -1,0 +1,53 @@
+# Entornos virtuales (el nombre más común es venv o .venv)
+venv/
+.venv/
+env/
+bin/
+include/
+lib/
+share/
+
+# Archivos compilados de Python y Caché
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribución / Empaquetado
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Variables de entorno y secretos (¡MUY IMPORTANTE!)
+.env
+.flaskenv
+*.secret
+
+# Herramientas de testing y cobertura
+.target/
+.pytest_cache/
+.tox/
+.nox/
+.coverage
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IDEs (Opcional, pero recomendado)
+.vscode/
+.idea/
+*.swp
