@@ -1,4 +1,5 @@
-import os, re, pandas as pd
+import os, re, numpy as np, pandas as pd
+from datetime import datetime
 os.system("cls" if os.name == "nt" else "clear")
 
 df = pd.read_excel("tareas.xlsx", sheet_name="Sheet1")
@@ -52,16 +53,22 @@ for i in range(len(header_index_list) - 1):
   content = df.iloc[start + 1:end].copy()  
   
   if section_name == "Asignado":
-    fila_vacia = content["Etapa"].isna() & content["Etiquetas"].notna()
-    etiqueta_a_subir = content["Etiquetas"].shift(-1)
-    content.loc[fila_vacia.shift(-1).fillna(False), "Etiquetas"] += f", {etiqueta_a_subir}"
-    content = content.dropna(subset=["Etapa"]).reset_index(drop=True)
-  
+    mask_vacias = content["Etapa"].isna() & content["Etiquetas"].notna()
+    content.loc[mask_vacias.shift(-1, fill_value=False), 'Etiquetas_Extra'] = content['Etiquetas'].shift(-1)
+    content['Etiquetas'] = content['Etiquetas'].astype(str) + ", " + content['Etiquetas_Extra'].fillna('')
+    content = content[content['Etapa'].notna()].drop(columns=['Etiquetas_Extra']).reset_index(drop=True)
+
+  if section_name == "Hecho":
+    actual_date = pd.to_datetime('2026-04-07')
+    content['Última actualización de la etapa'] = pd.to_datetime(content['Última actualización de la etapa'], errors='coerce').dt.floor("D")
+    content = content[content['Última actualización de la etapa'] == actual_date].copy()
+    print(len(content))
+
   status["sections"][section_name] = content
 
 for index, row in status["sections"]["Asignado"].iterrows():
   filter = re.search(r"s*\(User\)?", row["Personas asignadas"])
-  etiqueta = str(row["Etiquetas"]).upper()
+  etiqueta = str(row["Etiquetas"]).upper().replace(" ", "")
   type = "RF" if "RF" in etiqueta else "FTTH"
 
   asigned_person = row["Personas asignadas"][0:filter.start()].strip() if filter else row["Personas asignadas"].strip()
@@ -76,8 +83,6 @@ for index, row in status["sections"]["Asignado"].iterrows():
 
   if TEAM[asigned_person]: status["asigned_persons"][asigned_person][type] += 1
   else: status["asigned_persons"][asigned_person] += 1
-
-print(status["asigned_persons"].keys())
 
 def fetch_value(name, mix = False):
   alias = {
@@ -137,7 +142,7 @@ STATUS DE LAS ASISTENCIAS
 ▪️ *SMARTLIFE:* {fetch_value("SMARTLIFE", True)}
 ▪️ *TERASERVICES VALENCIA:* {fetch_value("TERASERVICES VALENCIA", True)}
 ▪️ *TERASERVICES PUERTO:* {fetch_value("TERASERVICES PUERTO", True)}
-▪️ *TERASERVICES ARAGUA:* (0)
+▪️ TRS 2048: ({fetch_value("TRS 2048", True)})
 
 ▪️ Asistencias en progreso: {status["en_progreso"]}
 ▪️ Asistencias por facturar: {status["por_facturar"]}
